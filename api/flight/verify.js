@@ -1,10 +1,10 @@
 export const config = { runtime: "edge" };
 
-const KEY = process.env.AVIATIONSTACK_KEY || "PASTE_YOUR_KEY_HERE";
+const KEY = process.env.AVIATIONSTACK_KEY || "4731750f816dc02bb466448243569224";
 
 export default async function handler(req) {
   try {
-    if (!KEY || KEY === "PASTE_YOUR_KEY_HERE") {
+    if (!KEY || KEY === "4731750f816dc02bb466448243569224") {
       return json({ ok: false, msg: "missing AVIATIONSTACK_KEY" });
     }
 
