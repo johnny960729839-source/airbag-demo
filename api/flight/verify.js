@@ -1,53 +1,41 @@
-export const config = { runtime: "edge" };
+// /api/flight/verify.js
+export default async function handler(req, res) {
+  const flight = (req.query.flight || "").trim();   // 如：AA100
+  const date   = (req.query.date || "").trim();     // YYYY-MM-DD
 
-const KEY = process.env.AVIATIONSTACK_KEY || "4731750f816dc02bb466448243569224";
+  if (!flight || !date) {
+    return res.status(400).json({ ok: false, msg: "missing params: flight/date" });
+  }
 
-export default async function handler(req) {
+  const key = process.env.AVIATIONSTACK_KEY;
+  if (!key) {
+    return res.status(200).json({ ok: false, msg: "missing AVIATIONSTACK_KEY" });
+  }
+
   try {
-    if (!KEY || KEY === "4731750f816dc02bb466448243569224") {
-      return json({ ok: false, msg: "missing AVIATIONSTACK_KEY" });
-    }
+    const url =
+      `http://api.aviationstack.com/v1/flights?access_key=${encodeURIComponent(key)}` +
+      `&flight_iata=${encodeURIComponent(flight)}&flight_date=${encodeURIComponent(date)}`;
 
-    const urlReq = new URL(req.url);
-    const flight = (urlReq.searchParams.get("flight") || "").trim();
-    const date   = (urlReq.searchParams.get("date") || "").trim();
+    const r = await fetch(url);
+    const j = await r.json();
 
-    if (!flight || !date) return json({ ok: false, msg: "missing params" });
+    // aviationstack 正常数据在 j.data 数组里
+    const item = Array.isArray(j?.data) && j.data.length ? j.data[0] : null;
 
-    // ★ aviationstack 免费层必须 http
-    const url = new URL("http://api.aviationstack.com/v1/flights");
-    url.searchParams.set("access_key", KEY);
-    url.searchParams.set("flight_iata", flight);
-    url.searchParams.set("flight_date", date);
-    url.searchParams.set("limit", "1");
-
-    const r = await fetch(url, { method: "GET" });
-    const body = await r.json();
-
-    const one = Array.isArray(body?.data) ? body.data[0] : null;
-    if (!one) {
-      return json({
-        ok: false,
-        msg: body?.error ? (body.error.type || "api error") : "not found",
-        debug: { url: String(url), pagination: body?.pagination || null },
-      });
+    if (!item) {
+      return res.status(200).json({ ok: false, msg: "not found", raw: j?.error || null });
     }
 
     const route = {
-      dep_iata: one?.departure?.iata || "",
-      dep_city: one?.departure?.airport || "",
-      arr_iata: one?.arrival?.iata || "",
-      arr_city: one?.arrival?.airport || "",
+      dep_iata: item?.departure?.iata || item?.departure?.airport_iata,
+      dep_city: item?.departure?.city || item?.departure?.airport,
+      arr_iata: item?.arrival?.iata   || item?.arrival?.airport_iata,
+      arr_city: item?.arrival?.city   || item?.arrival?.airport,
     };
-    return json({ ok: true, route, debug: { url: String(url) } });
-  } catch (e) {
-    return json({ ok: false, msg: String(e) }, 500);
-  }
-}
 
-function json(obj, status = 200) {
-  return new Response(JSON.stringify(obj), {
-    headers: { "content-type": "application/json; charset=utf-8" },
-    status,
-  });
+    return res.status(200).json({ ok: true, route, raw: { flight_date: item?.flight_date, airline: item?.airline?.name } });
+  } catch (err) {
+    return res.status(500).json({ ok: false, msg: "api error", detail: String(err) });
+  }
 }
