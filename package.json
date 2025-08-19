@@ -22,3 +22,6 @@
     "vite": "^5.4.1"
   }
 }
+"dependencies": {
+  "node-fetch": "^2"
+}
