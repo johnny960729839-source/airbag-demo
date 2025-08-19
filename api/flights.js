@@ -1,40 +1,43 @@
-// api/flights.js
-// 通用查询端点：/api/flights?dep_iata=BKK&arr_iata=CNX&limit=5
+export const config = { runtime: "edge" };
 
-const KEY = process.env.AVIATIONSTACK_KEY || "4731750f816dc02bb466448243569224";
+const KEY = process.env.AVIATIONSTACK_KEY || "PASTE_YOUR_KEY_HERE";
 
-module.exports = async (req, res) => {
+export default async function handler(req) {
   try {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-    if (req.method === "OPTIONS") return res.status(200).end();
-
     if (!KEY || KEY === "PASTE_YOUR_KEY_HERE") {
-      return res.status(200).json({ ok: false, msg: "missing AVIATIONSTACK_KEY" });
+      return json({ ok: false, msg: "missing AVIATIONSTACK_KEY" });
     }
 
-    const { dep_iata, arr_iata, limit = 10 } = req.query || {};
+    const u = new URL(req.url);
+    const dep_iata = u.searchParams.get("dep_iata") || "";
+    const arr_iata = u.searchParams.get("arr_iata") || "";
+    const limit = u.searchParams.get("limit") || "10";
 
     const url = new URL("http://api.aviationstack.com/v1/flights");
     url.searchParams.set("access_key", KEY);
     if (dep_iata) url.searchParams.set("dep_iata", dep_iata);
     if (arr_iata) url.searchParams.set("arr_iata", arr_iata);
-    url.searchParams.set("limit", String(limit));
+    url.searchParams.set("limit", limit);
 
-    const r = await fetch(url.toString());
+    const r = await fetch(url, { method: "GET" });
     const body = await r.json();
 
-    return res.status(r.status).json({
+    return json({
       ok: r.ok,
-      requested_url: url.toString(),
+      requested_url: String(url),
       error: body?.error || null,
       pagination: body?.pagination || null,
       count: Array.isArray(body?.data) ? body.data.length : 0,
       data: Array.isArray(body?.data) ? body.data : [],
-    });
+    }, r.ok ? 200 : 500);
   } catch (e) {
-    return res.status(500).json({ ok: false, msg: String(e) });
+    return json({ ok: false, msg: String(e) }, 500);
   }
-};
-const fetch = require("node-fetch");
+}
+
+function json(obj, status = 200) {
+  return new Response(JSON.stringify(obj), {
+    headers: { "content-type": "application/json; charset=utf-8" },
+    status,
+  });
+}
