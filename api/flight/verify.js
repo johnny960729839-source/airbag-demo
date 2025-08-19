@@ -1,51 +1,45 @@
-// api/flight/verify.js
-export default async function handler(req, res) {
-  let { flight, date } = req.query; // flight: 航班号, date: YYYY-MM-DD or YYYY/MM/DD
+// api/flights.js
+// 这是一个无框架 Node 函数（Vercel/Netlify/Render 的 serverless 目录都能用）。
+// 作用：后端代理调用 aviationstack（用 http 协议），并转发给前端。
+// 好处：避免浏览器 CORS，避免在前端暴露密钥。
 
-  if (!flight) return res.status(200).json({ ok:false, msg:'missing params' });
-  if (!process.env.AVIATIONSTACK_KEY) {
-    return res.status(200).json({ ok:false, msg:'missing AVIATIONSTACK_KEY' });
-  }
+const KEY = process.env.AVIATIONSTACK_KEY || "4731750f816dc02bb466448243569224"; // 建议先把你的 key 粘到引号里
 
-  // 1) 规范化日期：YYYY/MM/DD -> YYYY-MM-DD
-  if (date && date.includes('/')) date = date.replace(/\//g, '-');
-
-  async function callAviationstack(params) {
-    // 免费计划很多时候只能 http；在 Serverless 里用 http 没问题
-    const base = `http://api.aviationstack.com/v1/flights`;
-    const qs = new URLSearchParams({
-      access_key: process.env.AVIATIONSTACK_KEY,
-      flight_iata: flight,
-      ...(params?.date ? { flight_date: params.date } : {})
-    });
-    const url = `${base}?${qs.toString()}`;
-    const r = await fetch(url, { cache: 'no-store' });
-    const j = await r.json();
-    return Array.isArray(j?.data) && j.data.length ? j.data[0] : null;
-  }
-
+module.exports = async (req, res) => {
   try {
-    // 2) 先按“航班号+日期”查
-    let item = date ? await callAviationstack({ date }) : null;
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    if (req.method === "OPTIONS") return res.status(200).end();
 
-    // 3) 若无结果，再尝试“仅航班号”（取最近一次）
-    if (!item) item = await callAviationstack({});
+    const { dep_iata, arr_iata, flight_date, limit = 10 } = req.query || {};
 
-    if (!item) return res.status(200).json({ ok:false, msg:'not found' });
+    if (!KEY || KEY === "PASTE_YOUR_KEY_HERE") {
+      return res.status(400).json({ error: "Missing AVIATIONSTACK_KEY" });
+    }
 
-    const out = {
-      dep_iata: item?.departure?.iata || '',
-      dep_city: item?.departure?.city || item?.departure?.airport || '',
-      dep_time: item?.departure?.scheduled || item?.departure?.estimated || '',
-      arr_iata: item?.arrival?.iata || '',
-      arr_city: item?.arrival?.city || item?.arrival?.airport || '',
-      arr_time: item?.arrival?.scheduled || item?.arrival?.estimated || '',
-      status: item?.flight_status || ''
-    };
-    return res.status(200).json({ ok:true, route: out });
-  } catch (e) {
-    // 打点日志方便在 Vercel Functions 里查看
-    console.error('verify error', e);
-    return res.status(500).json({ ok:false, msg:'upstream error' });
+    // aviationstack 免费层务必用 http（不是 https）
+    const url = new URL("http://api.aviationstack.com/v1/flights");
+    url.searchParams.set("access_key", KEY);
+    if (dep_iata) url.searchParams.set("dep_iata", dep_iata);
+    if (arr_iata) url.searchParams.set("arr_iata", arr_iata);
+    if (flight_date) url.searchParams.set("flight_date", flight_date); // 仅限当天/近期历史，非未来时刻表
+    url.searchParams.set("limit", String(limit));
+
+    const r = await fetch(url.toString(), { method: "GET" });
+    const data = await r.json();
+
+    // 把关键调试信息也带回去，方便排错
+    return res.status(r.status).json({
+      status: r.status,
+      ok: r.ok,
+      requested_url: url.toString(),
+      pagination: data?.pagination,
+      error: data?.error,
+      count: Array.isArray(data?.data) ? data.data.length : 0,
+      data: data?.data || [],
+    });
+  } catch (err) {
+    return res.status(500).json({ error: String(err) });
   }
-}
+};
