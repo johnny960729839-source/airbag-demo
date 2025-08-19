@@ -2,11 +2,19 @@
 <html lang="zh">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>AirBag</title>
+    <!-- 如果你没在 Vercel 配前端变量，可把 Stripe 公钥先写这里： -->
+    <script>window.STRIPE_PUBLISHABLE_KEY = 'pk_test_xxx_REPLACE_ME';</script>
+    <style>body{margin:0;font-family:ui-sans-serif,system-ui,Arial}</style>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <script type="module">
+      import React from 'react'
+      import { createRoot } from 'react-dom/client'
+      import App from './src/App.jsx'
+      createRoot(document.getElementById('root')).render(React.createElement(App))
+    </script>
   </body>
 </html>
