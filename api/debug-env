@@ -1,0 +1,6 @@
+// /api/debug-env.js  —— 调通后可删除
+export default function handler(req, res) {
+  res.status(200).json({
+    has_AVIATIONSTACK_KEY: Boolean(process.env.AVIATIONSTACK_KEY)
+  });
+}
