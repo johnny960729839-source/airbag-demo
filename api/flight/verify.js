@@ -6,7 +6,7 @@ export default async function handler(req, res) {
 
     if (!flight || !date) return res.status(400).json({ ok:false, msg:'missing flight or date' });
 
-    const base = 'https://api.aviationstack.com/v1/flights'; // 免费层建议 http
+    const base = 'http://api.aviationstack.com/v1/flights'; // 免费层建议 http
     const url = `${base}?access_key=${key}&flight_iata=${encodeURIComponent(flight)}&flight_date=${encodeURIComponent(date)}&limit=100`;
 
     const r = await fetch(url);
