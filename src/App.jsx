@@ -103,21 +103,36 @@ export default function App() {
   // 实时航班校验后锁定下拉
   const [lockedByAPI, setLockedByAPI] = React.useState(false);
 
-  // 航班号/日期变化 -> 调用后端校验并回填
+  /**
+   * ✅ 适配我们后端返回结构：
+   * 命中： { ok:true, data:[ { dep:{iata}, arr:{iata}, ... } ] }
+   * 回退： { ok:false, samples:[ ...同上... ] }
+   */
   React.useEffect(() => {
     if (!form.code || !form.date) return;
     let aborted = false;
+
+    const listFind = (j) => {
+      const arr = Array.isArray(j?.data) && j.data.length ? j.data
+                : (Array.isArray(j?.samples) && j.samples.length ? j.samples : []);
+      return arr[0] || null;
+    };
+
     (async () => {
       try {
         const r = await fetch(`/api/flight/verify?flight=${encodeURIComponent(form.code)}&date=${form.date}`);
         const j = await r.json();
         if (aborted) return;
 
-        if (j?.ok && j.route) {
-          const { dep_iata, dep_city, arr_iata, arr_city } = j.route;
+        const item = listFind(j); // 取第一条命中或样本
+        if (item && (item.dep?.iata || item.arr?.iata)) {
+          const dep_iata = item.dep?.iata;
+          const arr_iata = item.arr?.iata;
+
           const list = cities?.length ? cities : CITY_FALLBACK;
-          const from = list.find(c => c.code === dep_iata) || list.find(c => c.name === dep_city);
-          const to   = list.find(c => c.code === arr_iata) || list.find(c => c.name === arr_city);
+          const from = dep_iata ? list.find(c => c.code === dep_iata) : null;
+          const to   = arr_iata ? list.find(c => c.code === arr_iata) : null;
+
           setForm(f => ({
             ...f,
             fromCity: from ? from.code : f.fromCity,
@@ -129,7 +144,7 @@ export default function App() {
           setLockedByAPI(false);
           const tip = j?.msg === 'missing AVIATIONSTACK_KEY'
             ? '后端未配置航班API密钥（AVIATIONSTACK_KEY）'
-            : (j?.msg === 'not found' ? '未查到该航班，请核对航班号/日期' : '航班校验失败，请稍后重试');
+            : (j?.msg?.includes('not found') ? '未查到该航班，请核对航班号/日期' : '航班校验失败，请稍后重试');
           setToast({ type: 'warn', text: tip });
         }
       } catch {
@@ -137,6 +152,7 @@ export default function App() {
         setToast({ type: 'warn', text: '航班校验异常，请稍后重试' });
       }
     })();
+
     return () => { aborted = true; };
   }, [form.code, form.date, cities]);
 
