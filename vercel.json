@@ -1,0 +1,14 @@
+{
+  "functions": {
+    "api/flight/**/*.js": { "runtime": "nodejs18.x" },
+    "api/airports.js":     { "runtime": "nodejs18.x" },
+    "api/flights.js":      { "runtime": "nodejs18.x" },
+    "api/ping.js":         { "runtime": "edge" }
+  },
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
