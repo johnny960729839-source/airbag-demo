@@ -1,36 +1,48 @@
-// /api/flight/verify.js  —— 默认 Node 运行时
 export default async function handler(req, res) {
-  const flight = (req.query.flight || "").trim();
-  const date   = (req.query.date || "").trim();
-
-  if (!flight || !date) {
-    return res.status(400).json({ ok: false, msg: "missing params: flight/date" });
-  }
-
-  const key = process.env.AVIATIONSTACK_KEY;          // ← 必须是这个名字
-  if (!key) {
-    return res.status(200).json({ ok: false, msg: "missing AVIATIONSTACK_KEY" });
-  }
-
   try {
-    const url =
-      `http://api.aviationstack.com/v1/flights?access_key=${encodeURIComponent(key)}` +
-      `&flight_iata=${encodeURIComponent(flight)}&flight_date=${encodeURIComponent(date)}`;
+    const { flight, date } = req.query; // flight=CJ3812  date=2025-08-20
+    const key = process.env.AVIATIONSTACK_KEY;
+    if (!key) return res.status(500).json({ ok:false, msg:'missing AVIATIONSTACK_KEY' });
+
+    if (!flight || !date) return res.status(400).json({ ok:false, msg:'missing flight or date' });
+
+    const base = 'http://api.aviationstack.com/v1/flights'; // 免费层建议 http
+    const url = `${base}?access_key=${key}&flight_iata=${encodeURIComponent(flight)}&flight_date=${encodeURIComponent(date)}&limit=100`;
 
     const r = await fetch(url);
-    const j = await r.json();
-    const item = Array.isArray(j?.data) && j.data.length ? j.data[0] : null;
+    const json = await r.json();
 
-    if (!item) return res.status(200).json({ ok: false, msg: "not found", raw: j?.error || null });
+    if (!json || !Array.isArray(json.data)) {
+      return res.status(502).json({ ok:false, msg:'upstream error', raw: json });
+    }
 
-    const route = {
-      dep_iata: item?.departure?.iata || item?.departure?.airport_iata,
-      dep_city: item?.departure?.city || item?.departure?.airport,
-      arr_iata: item?.arrival?.iata   || item?.arrival?.airport_iata,
-      arr_city: item?.arrival?.city   || item?.arrival?.airport
-    };
-    return res.status(200).json({ ok: true, route });
+    // 保险起见，再按航班号与日期过滤一次
+    const list = json.data.filter(it =>
+      (it?.flight?.iata === flight || it?.flight?.number === flight) &&
+      it?.flight_date === date
+    );
+
+    if (list.length === 0) {
+      return res.status(200).json({ ok:false, msg:'not found', count: 0, raw: json?.pagination });
+    }
+
+    // 只返回你前端需要的字段
+    const simplified = list.map(it => ({
+      flight_date: it.flight_date,
+      status: it.flight_status,
+      dep_iata: it.departure?.iata,
+      dep_airport: it.departure?.airport,
+      dep_time: it.departure?.scheduled,
+      arr_iata: it.arrival?.iata,
+      arr_airport: it.arrival?.airport,
+      arr_time: it.arrival?.scheduled,
+      airline: it.airline?.name,
+      flight_iata: it.flight?.iata || it.flight?.number,
+      flight_icao: it.flight?.icao,
+    }));
+
+    return res.status(200).json({ ok:true, count: simplified.length, data: simplified });
   } catch (e) {
-    return res.status(500).json({ ok: false, msg: "api error", detail: String(e) });
+    return res.status(500).json({ ok:false, msg:'server error', error: String(e) });
   }
 }
