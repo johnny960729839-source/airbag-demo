@@ -1,13 +1,13 @@
-// /api/flight/verify.js
+// /api/flight/verify.js  —— 默认 Node 运行时
 export default async function handler(req, res) {
-  const flight = (req.query.flight || "").trim();   // 如：AA100
-  const date   = (req.query.date || "").trim();     // YYYY-MM-DD
+  const flight = (req.query.flight || "").trim();
+  const date   = (req.query.date || "").trim();
 
   if (!flight || !date) {
     return res.status(400).json({ ok: false, msg: "missing params: flight/date" });
   }
 
-  const key = process.env.AVIATIONSTACK_KEY;
+  const key = process.env.AVIATIONSTACK_KEY;          // ← 必须是这个名字
   if (!key) {
     return res.status(200).json({ ok: false, msg: "missing AVIATIONSTACK_KEY" });
   }
@@ -19,23 +19,18 @@ export default async function handler(req, res) {
 
     const r = await fetch(url);
     const j = await r.json();
-
-    // aviationstack 正常数据在 j.data 数组里
     const item = Array.isArray(j?.data) && j.data.length ? j.data[0] : null;
 
-    if (!item) {
-      return res.status(200).json({ ok: false, msg: "not found", raw: j?.error || null });
-    }
+    if (!item) return res.status(200).json({ ok: false, msg: "not found", raw: j?.error || null });
 
     const route = {
       dep_iata: item?.departure?.iata || item?.departure?.airport_iata,
       dep_city: item?.departure?.city || item?.departure?.airport,
       arr_iata: item?.arrival?.iata   || item?.arrival?.airport_iata,
-      arr_city: item?.arrival?.city   || item?.arrival?.airport,
+      arr_city: item?.arrival?.city   || item?.arrival?.airport
     };
-
-    return res.status(200).json({ ok: true, route, raw: { flight_date: item?.flight_date, airline: item?.airline?.name } });
-  } catch (err) {
-    return res.status(500).json({ ok: false, msg: "api error", detail: String(err) });
+    return res.status(200).json({ ok: true, route });
+  } catch (e) {
+    return res.status(500).json({ ok: false, msg: "api error", detail: String(e) });
   }
 }
